@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.17xhw.wti-oil-price",
+  "name": "WTI Oil Price",
+  "version": "1.0.0",
+  "author": "17",
+  "description": "Live WTI crude-oil futures price with daily change and rapid-move alerts.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "WTI Oil Price",
+    "description": "WTI crude-oil futures price, daily change, and 10-minute movement alerts.",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "center",
+    "defaults": {
+      "refreshSeconds": 30
+    },
+    "schema": [
+      {
+        "key": "refreshSeconds",
+        "type": "number",
+        "label": "Refresh interval (seconds)",
+        "min": 15,
+        "max": 3600
+      }
+    ]
+  }
+}
