@@ -1,5 +1,7 @@
 # WTI Oil Price for Omarchy
 
+![WTI Oil Price running in the Omarchy bar](preview.png)
+
 A compact Omarchy bar widget for the front-month WTI crude-oil future (`CL=F`). It shows the latest price and daily percentage change, refreshes every 30 seconds, and sends an urgent desktop notification after a rapid 10-minute move of at least 1.5%.
 
 Market data is fetched from Yahoo Finance. The widget uses only Python's standard library; no packages or API key are required.
