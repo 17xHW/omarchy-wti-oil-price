@@ -3,8 +3,10 @@
 
 import json
 import os
+import stat
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 
@@ -12,17 +14,43 @@ import urllib.request
 URL = "https://query1.finance.yahoo.com/v8/finance/chart/CL=F?interval=1m&range=1d"
 ALERT_THRESHOLD_PERCENT = 1.5
 ALERT_COOLDOWN_SECONDS = 600
-STATE_FILE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "omarchy-wti-oil-price-alert.json")
+MAX_RESPONSE_BYTES = 1024 * 1024
+
+
+def state_file_path():
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir:
+        return os.path.join(runtime_dir, "omarchy-wti-oil-price-alert.json")
+    return os.path.join(tempfile.gettempdir(), f"omarchy-wti-oil-price-alert-{os.getuid()}.json")
+
+
+STATE_FILE = state_file_path()
 
 
 def emit(text, tooltip):
     print(json.dumps({"text": text, "tooltip": tooltip}))
 
 
+def read_json_response(response):
+    content_length = response.headers.get("Content-Length")
+    if content_length is not None:
+        try:
+            reported_size = int(content_length)
+        except (TypeError, ValueError):
+            reported_size = None
+        if reported_size is not None and reported_size > MAX_RESPONSE_BYTES:
+            raise ValueError("Yahoo Finance response is too large")
+
+    payload = response.read(MAX_RESPONSE_BYTES + 1)
+    if len(payload) > MAX_RESPONSE_BYTES:
+        raise ValueError("Yahoo Finance response is too large")
+    return json.loads(payload)
+
+
 def read_market_data():
     request = urllib.request.Request(URL, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(request, timeout=10) as response:
-        data = json.load(response)
+        data = read_json_response(response)
 
     result = data["chart"]["result"][0]
     meta = result["meta"]
@@ -44,12 +72,54 @@ def ten_minute_change(points):
     return (latest_price - historical_price) / historical_price * 100
 
 
+def read_alert_state():
+    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+    descriptor = os.open(STATE_FILE, flags)
+    try:
+        file_info = os.fstat(descriptor)
+        unsafe_mode = file_info.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+        if (
+            not stat.S_ISREG(file_info.st_mode)
+            or file_info.st_uid != os.getuid()
+            or file_info.st_nlink != 1
+            or unsafe_mode
+        ):
+            raise OSError("unsafe alert state file")
+        with os.fdopen(descriptor, encoding="utf-8") as state:
+            descriptor = -1
+            return json.load(state)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def write_alert_state(latest_price):
+    directory = os.path.dirname(STATE_FILE)
+    prefix = f".{os.path.basename(STATE_FILE)}."
+    descriptor, temporary_path = tempfile.mkstemp(prefix=prefix, dir=directory)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as state:
+            descriptor = -1
+            json.dump({"time": time.time(), "price": latest_price}, state)
+            state.flush()
+            os.fsync(state.fileno())
+        os.replace(temporary_path, STATE_FILE)
+    except Exception:
+        if descriptor >= 0:
+            os.close(descriptor)
+        try:
+            os.unlink(temporary_path)
+        except OSError:
+            pass
+        raise
+
+
 def should_alert(latest_price, change):
     if abs(change) < ALERT_THRESHOLD_PERCENT:
         return False
     try:
-        with open(STATE_FILE, encoding="utf-8") as state:
-            previous = json.load(state)
+        previous = read_alert_state()
     except (OSError, ValueError):
         previous = {}
 
@@ -60,8 +130,7 @@ def should_alert(latest_price, change):
         return False
 
     try:
-        with open(STATE_FILE, "w", encoding="utf-8") as state:
-            json.dump({"time": time.time(), "price": latest_price}, state)
+        write_alert_state(latest_price)
     except OSError:
         pass
     return True
