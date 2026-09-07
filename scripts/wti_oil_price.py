@@ -14,6 +14,7 @@ import urllib.request
 URL = "https://query1.finance.yahoo.com/v8/finance/chart/CL=F?interval=1m&range=1d"
 ALERT_THRESHOLD_PERCENT = 1.5
 ALERT_COOLDOWN_SECONDS = 600
+STALE_AFTER_SECONDS = 30 * 60
 MAX_RESPONSE_BYTES = 1024 * 1024
 
 
@@ -60,7 +61,34 @@ def read_market_data():
     timestamps = result.get("timestamp", [])
     closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
     points = [(timestamp, price) for timestamp, price in zip(timestamps, closes) if price is not None]
-    return current_price, previous_close, trade_time, points or [(trade_time, current_price)]
+    return current_price, previous_close, trade_time, points
+
+
+def format_age(seconds):
+    minutes = max(1, int(seconds // 60))
+    if minutes < 60:
+        return f"{minutes} minute{'s' if minutes != 1 else ''}"
+    hours = minutes // 60
+    if hours < 48:
+        return f"{hours} hour{'s' if hours != 1 else ''}"
+    days = hours // 24
+    return f"{days} day{'s' if days != 1 else ''}"
+
+
+def stale_reason(trade_time, points, now=None):
+    if not points:
+        return "Yahoo returned no intraday price samples"
+
+    checked_at = time.time() if now is None else now
+    latest_time = points[-1][0]
+    age = max(0, checked_at - latest_time)
+    if age > STALE_AFTER_SECONDS:
+        return f"Yahoo's latest intraday quote is {format_age(age)} old"
+
+    if trade_time and checked_at - trade_time > STALE_AFTER_SECONDS:
+        return f"Yahoo's market timestamp is {format_age(checked_at - trade_time)} old"
+
+    return ""
 
 
 def ten_minute_change(points):
@@ -155,7 +183,21 @@ def main():
     try:
         current_price, previous_close, trade_time, points = read_market_data()
     except Exception as error:
-        emit("WTI —", f"Could not fetch WTI price: {error}")
+        emit("WTI unavailable", f"Could not fetch WTI price: {error}")
+        return
+
+    stale = stale_reason(trade_time, points)
+    if stale:
+        color = "#f2c94c"
+        text = f"WTI ${current_price:.2f} <font color='{color}'>STALE</font>"
+        tooltip = (
+            f"WTI Crude Oil front-month future (Yahoo Finance): ${current_price:.2f} USD\n"
+            "Status: STALE — market closed or Yahoo data delayed\n"
+            f"Reason: {stale}.\n"
+            f"Last Yahoo timestamp: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(trade_time))}\n\n"
+            "The displayed price is the last value Yahoo supplied. Alerts are paused until fresh intraday data returns."
+        )
+        emit(text, tooltip)
         return
 
     change_10m = ten_minute_change(points)

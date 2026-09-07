@@ -41,6 +41,39 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual(WTI.read_json_response(response), {"chart": {"result": []}})
 
 
+class FreshnessTests(unittest.TestCase):
+    def test_empty_intraday_series_is_stale(self):
+        reason = WTI.stale_reason(2_000_000, [], now=2_000_000)
+
+        self.assertIn("no intraday price samples", reason)
+
+    def test_old_intraday_quote_is_stale(self):
+        reason = WTI.stale_reason(2_000_000, [(1_996_400, 91.0)], now=2_000_000)
+
+        self.assertIn("1 hour old", reason)
+
+    def test_fresh_quote_is_not_stale(self):
+        reason = WTI.stale_reason(1_999_940, [(1_999_940, 91.0)], now=2_000_000)
+
+        self.assertEqual(reason, "")
+
+    def test_stale_output_keeps_price_and_pauses_alerts(self):
+        with (
+            mock.patch.object(WTI, "read_market_data", return_value=(91.48, 91.30, 2_000_000, [])),
+            mock.patch.object(WTI, "emit") as emit,
+            mock.patch.object(WTI, "should_alert") as should_alert,
+            mock.patch.object(WTI, "notify") as notify,
+        ):
+            WTI.main()
+
+        text, tooltip = emit.call_args.args
+        self.assertIn("WTI $91.48", text)
+        self.assertIn("STALE", text)
+        self.assertIn("market closed or Yahoo data delayed", tooltip)
+        should_alert.assert_not_called()
+        notify.assert_not_called()
+
+
 class StateFileTests(unittest.TestCase):
     def test_atomic_write_replaces_symlink_without_touching_target(self):
         with tempfile.TemporaryDirectory() as directory:
