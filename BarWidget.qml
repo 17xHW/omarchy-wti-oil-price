@@ -69,6 +69,26 @@ BarWidget {
     bar: root.bar
     text: root.label
     tooltipText: root.tooltip
+    // WidgetButton uses PlainText. Keep its interaction and tooltip handling,
+    // but render the helper's colored percentage (or stale badge) ourselves.
+    labelVisible: false
+    implicitWidth: vertical ? barSize : Math.max(12, priceLabel.implicitWidth + scaledHorizontalMargin * 2)
+    implicitHeight: vertical ? Math.max(12, priceLabel.implicitHeight + scaledVerticalPadding * 2) : barSize
+
+    Text {
+      id: priceLabel
+      anchors.centerIn: parent
+      text: root.label
+      textFormat: Text.StyledText
+      color: button.foreground
+      font.family: button.fontFamily
+      font.pixelSize: button.fontSize
+      renderType: Text.NativeRendering
+      rotation: button.textRotation
+      horizontalAlignment: Text.AlignHCenter
+      verticalAlignment: Text.AlignVCenter
+    }
+
     // A click gives an immediate refresh without adding an unnecessary panel.
     onPressed: function(button) {
       if (button === Qt.LeftButton || button === Qt.MiddleButton) root.refresh()
