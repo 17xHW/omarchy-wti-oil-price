@@ -28,8 +28,8 @@ def state_file_path():
 STATE_FILE = state_file_path()
 
 
-def emit(text, tooltip):
-    print(json.dumps({"text": text, "tooltip": tooltip}))
+def emit(text, tooltip, color="", accent_text=""):
+    print(json.dumps({"text": text, "tooltip": tooltip, "color": color, "accentText": accent_text}))
 
 
 def read_json_response(response):
@@ -189,7 +189,7 @@ def main():
     stale = stale_reason(trade_time, points)
     if stale:
         color = "#f2c94c"
-        text = f"WTI ${current_price:.2f} <font color='{color}'>STALE</font>"
+        text = f"WTI ${current_price:.2f} STALE"
         tooltip = (
             f"WTI Crude Oil front-month future (Yahoo Finance): ${current_price:.2f} USD\n"
             "Status: STALE — market closed or Yahoo data delayed\n"
@@ -197,7 +197,7 @@ def main():
             f"Last Yahoo timestamp: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(trade_time))}\n\n"
             "The displayed price is the last value Yahoo supplied. Alerts are paused until fresh intraday data returns."
         )
-        emit(text, tooltip)
+        emit(text, tooltip, color, "STALE")
         return
 
     change_10m = ten_minute_change(points)
@@ -207,7 +207,7 @@ def main():
     daily_change = (current_price - previous_close) / previous_close * 100
     color = "#2ecc71" if daily_change > 0 else "#e74c3c" if daily_change < 0 else "#7f8c8d"
     sign = "+" if daily_change > 0 else ""
-    text = f"WTI ${current_price:.2f} <font color='{color}'>{sign}{daily_change:.2f}%</font>"
+    text = f"WTI ${current_price:.2f} {sign}{daily_change:.2f}%"
     tooltip = (
         f"WTI Crude Oil front-month future (Yahoo Finance): ${current_price:.2f} USD\n"
         f"Previous close: ${previous_close:.2f}\n"
@@ -216,7 +216,7 @@ def main():
         f"Updated: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(trade_time))}\n\n"
         "Click to refresh. Alerts fire for a 1.5% move over roughly 10 minutes."
     )
-    emit(text, tooltip)
+    emit(text, tooltip, color, f"{sign}{daily_change:.2f}%")
 
 
 if __name__ == "__main__":

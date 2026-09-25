@@ -66,12 +66,32 @@ class FreshnessTests(unittest.TestCase):
         ):
             WTI.main()
 
-        text, tooltip = emit.call_args.args
+        text, tooltip, color, accent_text = emit.call_args.args
         self.assertIn("WTI $91.48", text)
         self.assertIn("STALE", text)
+        self.assertNotIn("<font", text)
+        self.assertEqual(color, "#f2c94c")
+        self.assertEqual(accent_text, "STALE")
         self.assertIn("market closed or Yahoo data delayed", tooltip)
         should_alert.assert_not_called()
         notify.assert_not_called()
+
+    def test_fresh_output_uses_plain_text_and_separate_color(self):
+        points = [(1_999_400, 90.0), (2_000_000, 91.0)]
+        with (
+            mock.patch.object(WTI, "read_market_data", return_value=(91.0, 90.0, 2_000_000, points)),
+            mock.patch.object(WTI, "stale_reason", return_value=""),
+            mock.patch.object(WTI, "should_alert", return_value=False),
+            mock.patch.object(WTI, "emit") as emit,
+        ):
+            WTI.main()
+
+        text, tooltip, color, accent_text = emit.call_args.args
+        self.assertEqual(text, "WTI $91.00 +1.11%")
+        self.assertNotIn("<font", text)
+        self.assertEqual(color, "#2ecc71")
+        self.assertEqual(accent_text, "+1.11%")
+        self.assertIn("Daily change: +1.11%", tooltip)
 
 
 class StateFileTests(unittest.TestCase):
