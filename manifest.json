@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.17xhw.wti-oil-price",
   "name": "WTI Oil Price",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "author": "17",
   "description": "Live WTI crude-oil futures price with daily change and rapid-move alerts.",
   "kinds": ["bar-widget"],
